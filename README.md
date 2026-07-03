@@ -20,86 +20,128 @@ Energyinator is a Python tool for generating 3D molecular conformers from SMILES
 
 ## 📋 Requirements
 
+### ⚠️ Important: Conda Environment Required for Psi4
+
+**Psi4 must be installed via Conda.** The Psi4 quantum chemistry package has complex dependencies that are best managed through the Conda package manager. Using pip for Psi4 is not recommended and often fails.
+
 ### Python Dependencies
 
-Create a virtual environment and install the required packages:
+#### Option A: Conda Environment (RECOMMENDED for Psi4)
 
 ```bash
-# Create virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Install Miniconda or Anaconda first
+# Download from: https://docs.conda.io/en/latest/miniconda.html
 
-# Install required packages
-pip install rdkit>=2023.03.0 psi4>=1.8.0 pandas>=1.5.0 tqdm>=4.64.0
+# Create conda environment
+conda create -n energinator python=3.10 -y
+conda activate energinator
+
+# Install Psi4 and other dependencies via conda
+conda install -c conda-forge psi4 rdkit pandas tqdm -y
+```
+
+#### Option B: System Dependencies + Conda for Psi4
+
+If you prefer pip for most packages but need conda for Psi4:
+
+```bash
+# Create conda environment ONLY for Psi4
+conda create -n psi4-env psi4 -c conda-forge -y
+conda activate psi4-env
+
+# Then in your main environment, install other packages with pip
+pip install rdkit>=2023.03.0 pandas>=1.5.0 tqdm>=4.64.0
 ```
 
 ### System Requirements
 
 
-| Requirement    | Minimum   | Recommended                    |
-| -------------- | --------- | ------------------------------ |
-| **Python**     | 3.8       | 3.10+                          |
-| **Memory**     | 8 GB RAM  | 16 GB RAM                      |
-| **CPU**        | Dual-core | Multi-core (for parallel Psi4) |
-| **Disk Space** | 2 GB      | 5 GB                           |
+| Requirement    | Minimum               | Recommended                    |
+| -------------- | --------------------- | ------------------------------ |
+| **Python**     | 3.8                   | 3.10+                          |
+| **Conda**      | Miniconda or Anaconda | Latest                         |
+| **Memory**     | 8 GB RAM              | 16 GB RAM                      |
+| **CPU**        | Dual-core             | Multi-core (for parallel Psi4) |
+| **Disk Space** | 5 GB                  | 10 GB                          |
 
 
-### Psi4 System Dependencies
-
-Psi4 requires additional system libraries. Installation methods vary by platform:
-
-#### **Ubuntu/Debian**
-
-```bash
-sudo apt-get update
-sudo apt-get install -y python3-dev cmake gfortran libopenblas-dev liblapack-dev
-```
-
-#### **CentOS/RHEL**
-
-```bash
-sudo yum install -y python3-devel cmake gcc-gfortran openblas-devel lapack-devel
-```
-
-#### **macOS (with Homebrew)**
-
-```bash
-brew install cmake gcc openblas lapack
-```
-
-#### **Windows**
-
-Use **Windows Subsystem for Linux (WSL)** or install [MSYS2](https://www.msys2.org/):
-
-```bash
-pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-gfortran mingw-w64-x86_64-cmake
-```
+> **⚠️ Note:** Psi4 installation via conda requires ~2-3 GB of disk space for dependencies.
 
 ---
 
 ## 🚀 Installation
 
-### Option 1: Clone from GitHub
+### ⚠️ Prerequisite: Install Conda
+
+Before installing Energyinator, ensure you have Conda installed:
+
+- Download **Miniconda**: [https://docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html)
+- Or install **Anaconda**: [https://www.anaconda.com/download](https://www.anaconda.com/download)
+
+After installation, restart your terminal or run:
 
 ```bash
-git clone https://github.com/your-username/Energinator.git
-cd Energyinator
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
+source ~/.bashrc  # or ~/.zshrc, ~/.bash_profile depending on your shell
 ```
 
-### Option 2: Manual Setup
+---
+
+### Option 1: Full Conda Environment (RECOMMENDED)
+
+This is the simplest and most reliable method:
+
+```bash
+# Clone the repository
+git clone https://github.com/your-username/Energinator.git
+cd Energyinator
+
+# Create and activate conda environment
+conda create -n energinator python=3.10 -y
+conda activate energinator
+
+# Install all dependencies via conda (recommended)
+conda install -c conda-forge psi4 rdkit pandas tqdm -y
+
+# If you need to use pip for any additional packages
+pip install tqdm  # (if not already installed via conda)
+```
+
+### Option 2: Mixed Environment (Conda for Psi4 + pip for others)
+
+If you prefer pip for most packages:
+
+```bash
+# Clone the repository
+git clone https://github.com/sirfilips/energy-inator
+cd Energyinator
+
+# Create conda environment for Psi4
+conda create -n psi4-env python=3.10 -y
+conda activate psi4-env
+conda install -c conda-forge psi4 -y
+
+# Install other packages with pip
+pip install rdkit>=2023.03.0 pandas>=1.5.0 tqdm>=4.64.0
+```
+
+### Option 3: Manual Setup
 
 1. Download `Energyinator.py`
-2. Create `requirements.txt` with:
+2. Create `environment.yml` with:
+  ```yaml
+   name: energinator
+   channels:
+     - conda-forge
+     - defaults
+   dependencies:
+     - python=3.10
+     - psi4
+     - rdkit
+     - pandas
+     - tqdm
   ```
-   rdkit>=2023.03.0
-   psi4>=1.8.0
-   pandas>=1.5.0
-   tqdm>=4.64.0
-  ```
-3. Install dependencies: `pip install -r requirements.txt`
+3. Create environment: `conda env create -f environment.yml`
+4. Activate: `conda activate energinator`
 
 ---
 
@@ -108,8 +150,8 @@ pip install -r requirements.txt
 ### Quick Start
 
 ```bash
-# Activate virtual environment
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Activate conda environment
+conda activate energinator  # or: conda activate psi4-env
 
 # Run the script
 python Energyinator.py
@@ -289,9 +331,13 @@ ModuleNotFoundError: No module named 'psi4'
 
 **Solution**:
 
-- Install system dependencies first
-- Try: `conda install -c conda-forge psi4`
+- **You MUST use Conda for Psi4**: `conda install -c conda-forge psi4 -y`
+- Ensure you have activated your conda environment: `conda activate energinator`
+- Verify installation: `conda list psi4`
+- If you installed via pip, uninstall it first: `pip uninstall psi4` then use conda
 - Check [Psi4 installation guide](https://psicode.org/psi4manual/stable/installation.html)
+
+**⚠️ Important**: Psi4 installed via pip will NOT work properly. Always use conda.
 
 ---
 
