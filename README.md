@@ -37,7 +37,7 @@ conda create -n energinator python=3.10 -y
 conda activate energinator
 
 # Install Psi4 and other dependencies via conda
-conda install -c conda-forge psi4 rdkit pandas tqdm -y
+conda install -c conda-forge psi4 rdkit pandas tqdm openpyxl -y
 ```
 
 #### Option B: System Dependencies + Conda for Psi4
@@ -50,7 +50,7 @@ conda create -n psi4-env psi4 -c conda-forge -y
 conda activate psi4-env
 
 # Then in your main environment, install other packages with pip
-pip install rdkit>=2023.03.0 pandas>=1.5.0 tqdm>=4.64.0
+pip install rdkit>=2023.03.0 pandas>=1.5.0 tqdm>=4.64.0 openpyxl
 ```
 
 ### System Requirements
@@ -139,6 +139,7 @@ pip install rdkit>=2023.03.0 pandas>=1.5.0 tqdm>=4.64.0
      - rdkit
      - pandas
      - tqdm
+     - openpyxl
   ```
 3. Create environment: `conda env create -f environment.yml`
 4. Activate: `conda activate energinator`
