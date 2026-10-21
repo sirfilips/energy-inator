@@ -92,7 +92,7 @@ This is the simplest and most reliable method:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/Energinator.git
+git clone https://github.com/sirfilips/Energinator.git
 cd Energyinator
 
 # Create and activate conda environment
