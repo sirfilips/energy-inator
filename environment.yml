@@ -1,0 +1,14 @@
+name: energinator
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10
+  - psi4
+  - rdkit
+  - pandas
+  - tqdm
+  - openpyxl
+  - streamlit
+  - plotly
+  - py3dmol
+  - pip

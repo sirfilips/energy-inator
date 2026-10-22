@@ -1,0 +1,31 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Output and results
+output/
+*.log
+energyLOG.log
+timer.dat
+grid.*
+psi.*
+
+# Excel and data outputs outside repo
+*.xlsx
+*.xyz
+
+# Environments and IDEs
+.env
+.venv
+env/
+venv/
+.idea/
+.vscode/
+
+# Testing & distribution
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+

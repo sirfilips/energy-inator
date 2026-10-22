@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "energyinator"
+version = "0.2.0"
+authors = [
+    { name = "Filippo Zanardi" }
+]
+description = "Conformer generation and quantum chemistry energy calculation pipeline using RDKit and Psi4"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = [
+    "rdkit>=2023.03",
+    "pandas>=1.5.0",
+    "tqdm>=4.64.0",
+    "openpyxl>=3.0.0"
+]
+
+[project.scripts]
+energyinator = "energyinator.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["energyinator*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
