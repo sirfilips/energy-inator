@@ -48,9 +48,11 @@ def save_conformer_xyz(output_dir: str, conf: ConformerResult, timestamp: str) -
 def export_results_excel(output_dir: str, conformers: List[ConformerResult], timestamp: str) -> str:
     """Generates a well-formatted Excel spreadsheet summarizing thermodynamic and structural data."""
     rows = []
+    has_gibbs = any(c.gibbs_hartree is not None for c in conformers)
+
     for c in conformers:
         xyz_name = os.path.basename(c.output_path) if c.output_path else ""
-        rows.append({
+        row = {
             "Conformer_ID": c.conf_id,
             "Degeneracy": c.degeneracy,
             "Energy_Hartree": c.dft_energy_hartree,
@@ -58,7 +60,16 @@ def export_results_excel(output_dir: str, conformers: List[ConformerResult], tim
             "Energy_eV": c.dft_energy_ev,
             "Delta_E_kcalmol": c.delta_dft_kcalmol,
             "Delta_E_kJmol": c.delta_dft_kjmol,
-            "Boltzmann_Pop_%": c.boltzmann_pop,
+            "Boltzmann_Pop_%": c.boltzmann_pop
+        }
+
+        if has_gibbs:
+            row["Gibbs_Hartree"] = c.gibbs_hartree
+            row["Delta_G_kcalmol"] = c.delta_gibbs_kcalmol
+            row["ZPVE_Hartree"] = c.zpve_hartree
+            row["Entropy_cal_mol_K"] = c.entropy_cal_mol_k
+
+        row.update({
             "Dipole_Debye": c.dipole_debye,
             "HOMO_eV": c.homo_ev,
             "LUMO_eV": c.lumo_ev,
@@ -67,6 +78,7 @@ def export_results_excel(output_dir: str, conformers: List[ConformerResult], tim
             "Delta_FF_kcalmol": c.delta_ff_kcalmol,
             "XYZ_File": xyz_name
         })
+        rows.append(row)
 
     df = pd.DataFrame(rows)
     # Sort by Delta E ascending (ground state first)
@@ -77,4 +89,3 @@ def export_results_excel(output_dir: str, conformers: List[ConformerResult], tim
     df.to_excel(excel_path, index=False)
     logger.info(f"Report Excel esportato con successo in: {excel_path}")
     return excel_path
-

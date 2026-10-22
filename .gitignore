@@ -11,9 +11,15 @@ timer.dat
 grid.*
 psi.*
 
+# PCMSolver scratch files
+PEDRA.OUT*
+cavity.*
+
 # Excel and data outputs outside repo
 *.xlsx
 *.xyz
+*.cube
+result.json
 
 # Environments and IDEs
 .env
@@ -28,4 +34,3 @@ venv/
 dist/
 build/
 *.egg-info/
-

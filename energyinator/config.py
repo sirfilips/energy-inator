@@ -18,6 +18,9 @@ class CalculationConfig:
     psi4_method: str = "b3lyp-d3bj"  # Default with D3BJ dispersion correction
     psi4_basis: str = "6-31G(d)"
     sp_only: bool = False  # Single Point only (faster) vs full geometry optimization
+    solvent: Optional[str] = None  # Implicit solvent (PCM): None / "gas", "water", "chloroform", "dmso", etc.
+    calc_frequencies: bool = False  # Compute vibrational frequencies and Gibbs free energy (G)
+    freq_top_n: int = 1  # How many top conformers to compute frequencies for (default: 1, global min)
     
     # Post-DFT analysis settings
     post_dft_rmsd: float = 0.15  # RMSD threshold in Angstrom to detect collapsed conformers
@@ -31,4 +34,3 @@ class CalculationConfig:
     # Paths & logging
     output_dir: Optional[str] = None
     verbose: bool = True
-

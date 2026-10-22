@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "energyinator"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
     { name = "Filippo Zanardi" }
 ]
@@ -16,7 +16,9 @@ dependencies = [
     "rdkit>=2023.03",
     "pandas>=1.5.0",
     "tqdm>=4.64.0",
-    "openpyxl>=3.0.0"
+    "openpyxl>=3.0.0",
+    "requests>=2.28.0",
+    "streamlit-ketcher>=0.0.1"
 ]
 
 [project.scripts]
@@ -26,5 +28,6 @@ energyinator = "energyinator.cli:main"
 include = ["energyinator*"]
 
 [tool.pytest.ini_options]
+pythonpath = ["."]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

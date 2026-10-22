@@ -11,7 +11,8 @@ from energyinator.conformers import (
     prepare_molecule,
     generate_conformers_rdkit,
     optimize_force_field,
-    filter_conformers
+    filter_conformers,
+    deduplicate_post_dft
 )
 from energyinator.quantum import setup_psi4, close_psi4, run_psi4_calculation
 from energyinator.analysis import calculate_thermodynamics
@@ -39,6 +40,8 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
     logger.info("  ENERGYINATOR - Hybrid Quantum Conformer Search Pipeline")
     logger.info("=" * 65)
     logger.info(f"SMILES target: {config.smiles}")
+    if config.solvent:
+        logger.info(f"Solvatazione implicita (PCM): {config.solvent.upper()}")
 
     try:
         # 2. Prepare molecule and determine electronic state
@@ -101,6 +104,8 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
                 method=config.psi4_method,
                 basis=config.psi4_basis,
                 sp_only=config.sp_only,
+                solvent=config.solvent,
+                calc_frequencies=False,
                 smiles_label=smiles_clean
             )
 
@@ -120,30 +125,66 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
                     xyz_initial=xyz_block,
                     xyz_optimized=calc_out["xyz_optimized"]
                 )
-                # Save XYZ geometry file
-                save_conformer_xyz(output_dir, c_res, timestamp)
                 conformer_results.append(c_res)
 
         if not conformer_results:
             raise RuntimeError("Nessun conformero è stato calcolato con successo con Psi4.")
 
-        # 8. Post-DFT Analysis (Relative energies, Degeneracy, Boltzmann populations)
+        # 8. Post-DFT RMSD Deduplication (Filter collapsed geometries)
+        if config.post_dft_rmsd > 0 and len(conformer_results) > 1 and not config.sp_only:
+            logger.info(f"Verifica conformeri collassati post-DFT (soglia RMSD: {config.post_dft_rmsd} Å)...")
+            unique_confs = deduplicate_post_dft(
+                base_mol=mol,
+                conformer_results=conformer_results,
+                rmsd_threshold=config.post_dft_rmsd
+            )
+        else:
+            unique_confs = conformer_results
+
+        # 9. Optional Vibrational Frequencies & Gibbs free energy on top conformers
+        if config.calc_frequencies and not config.sp_only:
+            n_freq = min(max(1, config.freq_top_n), len(unique_confs))
+            logger.info(f"Calcolo frequenze vibrazionali e correzioni termiche sui primi {n_freq} conformeri...")
+            for i in range(n_freq):
+                c = unique_confs[i]
+                freq_out = run_psi4_calculation(
+                    xyz_block=c.xyz_optimized,
+                    conf_id=c.conf_id,
+                    charge=charge,
+                    multiplicity=multiplicity,
+                    method=config.psi4_method,
+                    basis=config.psi4_basis,
+                    sp_only=False,
+                    solvent=config.solvent,
+                    calc_frequencies=True,
+                    smiles_label=f"{smiles_clean}_freq"
+                )
+                if freq_out:
+                    c.gibbs_hartree = freq_out.get("gibbs_hartree")
+                    c.zpve_hartree = freq_out.get("zpve_hartree")
+                    c.enthalpy_hartree = freq_out.get("enthalpy_hartree")
+                    c.entropy_cal_mol_k = freq_out.get("entropy_cal_mol_k")
+
+        # Save XYZ files for unique conformers
+        for c_res in unique_confs:
+            save_conformer_xyz(output_dir, c_res, timestamp)
+
+        # 10. Post-DFT Analysis (Relative energies, Degeneracy, Boltzmann populations)
         processed_confs = calculate_thermodynamics(
-            conformer_results,
+            unique_confs,
             temperature_k=config.temperature_k,
             energy_tol_kcalmol=config.energy_degeneracy_tol
         )
 
-        # 9. Export Excel
+        # 11. Export Excel
         excel_path = export_results_excel(output_dir, processed_confs, timestamp)
 
-        # 10. Summary result building
+        # 12. Summary result building
         best_conf = processed_confs[0]
         worst_conf = processed_confs[-1]
         elapsed = time.time() - start_time
 
-        # Count unique DFT states based on degeneracy
-        unique_dft_count = len(set(round(c.dft_energy_hartree, 5) for c in processed_confs))
+        has_freqs = any(c.gibbs_hartree is not None for c in processed_confs)
 
         res = CalculationResult(
             smiles=config.smiles,
@@ -152,16 +193,18 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
             method=effective_method_used,
             basis=config.psi4_basis,
             force_field=effective_ff,
+            solvent=config.solvent,
             total_generated=len(initial_ids),
             unique_ff=len(selected_confs),
-            calculated_dft=len(processed_confs),
-            unique_dft=unique_dft_count,
+            calculated_dft=len(conformer_results),
+            unique_dft=len(processed_confs),
             min_energy_hartree=best_conf.dft_energy_hartree,
             min_energy_kcalmol=best_conf.dft_energy_kcalmol,
             min_energy_ev=best_conf.dft_energy_ev,
             max_energy_hartree=worst_conf.dft_energy_hartree,
             max_energy_kcalmol=worst_conf.dft_energy_kcalmol,
             max_energy_ev=worst_conf.dft_energy_ev,
+            has_frequencies=has_freqs,
             best_xyz_optimized=best_conf.xyz_optimized,
             best_output_path=best_conf.output_path,
             worst_xyz_optimized=worst_conf.xyz_optimized,
@@ -172,7 +215,7 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
             excel_path=excel_path
         )
 
-        # 11. Save structured JSON for GUI and automated pipelines
+        # 13. Save structured JSON for GUI and automated pipelines
         json_path = os.path.join(output_dir, "result.json")
         try:
             res.save_json(json_path)
@@ -193,4 +236,3 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
         # Crucial for Windows: release psi4 output and file logging locks
         close_psi4()
         close_run_logger(log_handler)
-

@@ -10,12 +10,19 @@ class ConformerResult:
     ff_energy: float
     delta_ff_kcalmol: float = 0.0
     
-    # Quantum chemistry results
+    # Quantum chemistry results (electronic)
     dft_energy_hartree: Optional[float] = None
     dft_energy_kcalmol: Optional[float] = None
     dft_energy_ev: Optional[float] = None
     delta_dft_kcalmol: Optional[float] = None
     delta_dft_kjmol: Optional[float] = None
+    
+    # Thermochemistry (Vibrational / Gibbs free energy)
+    gibbs_hartree: Optional[float] = None
+    delta_gibbs_kcalmol: Optional[float] = None
+    zpve_hartree: Optional[float] = None
+    enthalpy_hartree: Optional[float] = None
+    entropy_cal_mol_k: Optional[float] = None
     
     # Statistical thermodynamics
     boltzmann_pop: Optional[float] = None  # in %
@@ -42,11 +49,12 @@ class CalculationResult:
     method: str
     basis: str
     force_field: str
+    solvent: Optional[str] = None
     
-    total_generated: int
-    unique_ff: int
-    calculated_dft: int
-    unique_dft: int
+    total_generated: int = 0
+    unique_ff: int = 0
+    calculated_dft: int = 0
+    unique_dft: int = 0
     
     min_energy_hartree: float = 0.0
     min_energy_kcalmol: float = 0.0
@@ -55,6 +63,8 @@ class CalculationResult:
     max_energy_hartree: float = 0.0
     max_energy_kcalmol: float = 0.0
     max_energy_ev: float = 0.0
+    
+    has_frequencies: bool = False
     
     best_xyz_optimized: Optional[str] = None
     best_output_path: Optional[str] = None
@@ -113,4 +123,3 @@ class CalculationResult:
             self.worst_xyz_optimized, self.worst_output_path,
             self.elapsed_time
         )
-

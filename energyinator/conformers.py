@@ -1,7 +1,11 @@
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TYPE_CHECKING
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from rdkit.Geometry import Point3D
+
+if TYPE_CHECKING:
+    from energyinator.models import ConformerResult
 
 logger = logging.getLogger("energyinator")
 
@@ -166,3 +170,119 @@ def filter_conformers(
     logger.info(f"Conformeri unici selezionati per calcolo DFT: {len(unique_confs)}")
     return unique_confs
 
+
+def parse_xyz_coords(xyz_str: str) -> List[Tuple[float, float, float]]:
+    """Extracts 3D coordinates from an XYZ formatted string."""
+    lines = xyz_str.strip().splitlines()
+    if len(lines) >= 2 and lines[0].strip().isdigit():
+        lines = lines[2:]
+    coords = []
+    for line in lines:
+        parts = line.split()
+        if len(parts) >= 4:
+            coords.append((float(parts[1]), float(parts[2]), float(parts[3])))
+    return coords
+
+
+def deduplicate_post_dft(
+    base_mol: Chem.Mol,
+    conformer_results: List["ConformerResult"],
+    rmsd_threshold: float = 0.15
+) -> List["ConformerResult"]:
+    """Deduplicates conformers after quantum geometry optimization.
+    
+    If multiple starting structures collapsed into the same quantum potential energy well
+    (RMSD < rmsd_threshold), keeps only the lowest-energy conformer and increments its degeneracy.
+    """
+    if rmsd_threshold <= 0 or len(conformer_results) <= 1:
+        return conformer_results
+
+    from rdkit.Geometry import Point3D
+
+    # Sort ascending by DFT energy (Hartree)
+    sorted_confs = sorted(conformer_results, key=lambda c: c.dft_energy_hartree if c.dft_energy_hartree is not None else 1e9)
+
+    # Build reference molecule containing conformers
+    mol_work = Chem.Mol(base_mol)
+    mol_work.RemoveAllConformers()
+
+    valid_confs = []
+    for c in sorted_confs:
+        if not c.xyz_optimized:
+            continue
+        coords = parse_xyz_coords(c.xyz_optimized)
+        if len(coords) != mol_work.GetNumAtoms():
+            continue
+        conf = Chem.Conformer(mol_work.GetNumAtoms())
+        for idx, (x, y, z) in enumerate(coords):
+            conf.SetAtomPosition(idx, Point3D(x, y, z))
+        cid = mol_work.AddConformer(conf, assignId=True)
+        valid_confs.append((c, cid))
+
+    if not valid_confs:
+        return conformer_results
+
+    unique_results: List["ConformerResult"] = []
+    accepted_cids: List[int] = []
+
+    for c, cid in valid_confs:
+        collapsed_match = None
+        for ref_conf, ref_cid in zip(unique_results, accepted_cids):
+            rms = AllChem.GetBestRMS(mol_work, mol_work, ref_cid, cid)
+            if rms < rmsd_threshold:
+                collapsed_match = ref_conf
+                break
+
+        if collapsed_match is not None:
+            collapsed_match.degeneracy += 1
+            logger.info(
+                f"Conformero {c.conf_id} collassato su {collapsed_match.conf_id} "
+                f"(RMSD: {rms:.3f} < {rmsd_threshold} Å). Degenerazione: {collapsed_match.degeneracy}."
+            )
+        else:
+            unique_results.append(c)
+            accepted_cids.append(cid)
+
+    logger.info(f"Deduplicazione post-DFT: {len(unique_results)} conformeri unici su {len(valid_confs)} calcolati.")
+    return unique_results
+
+
+def compute_pairwise_rmsd_matrix(
+    smiles: str,
+    conformer_results: List["ConformerResult"]
+) -> Tuple[List[str], List[List[float]]]:
+    """Calcola la matrice di diversità RMSD simmetrico-allineata (tutti contro tutti) tra conformeri unici."""
+    mol_base = Chem.MolFromSmiles(smiles)
+    if mol_base is None:
+        return [], []
+    mol_work = Chem.AddHs(mol_base)
+    mol_work.RemoveAllConformers()
+
+    labels: List[str] = []
+    cids: List[int] = []
+
+    for c in conformer_results:
+        if not c.xyz_optimized:
+            continue
+        coords = parse_xyz_coords(c.xyz_optimized)
+        if len(coords) != mol_work.GetNumAtoms():
+            continue
+        conf = Chem.Conformer(mol_work.GetNumAtoms())
+        for idx, (x, y, z) in enumerate(coords):
+            conf.SetAtomPosition(idx, Point3D(x, y, z))
+        cid = mol_work.AddConformer(conf, assignId=True)
+        cids.append(cid)
+        labels.append(f"Conf {c.conf_id}")
+
+    n = len(cids)
+    if n == 0:
+        return [], []
+
+    matrix = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            rms = AllChem.GetBestRMS(mol_work, mol_work, cids[i], cids[j])
+            matrix[i][j] = round(rms, 3)
+            matrix[j][i] = round(rms, 3)
+
+    return labels, matrix

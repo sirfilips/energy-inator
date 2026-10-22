@@ -3,7 +3,7 @@
 from energyinator.config import CalculationConfig
 from energyinator.models import ConformerResult, CalculationResult
 from energyinator.pipeline import run_pipeline
-from energyinator.scan import run_dihedral_scan
+from energyinator.scan import run_dihedral_scan, run_2d_dihedral_scan
 
 
 def calcola_energia_psi4(
@@ -36,6 +36,6 @@ __all__ = [
     "ConformerResult",
     "run_pipeline",
     "run_dihedral_scan",
+    "run_2d_dihedral_scan",
     "calcola_energia_psi4"
 ]
-

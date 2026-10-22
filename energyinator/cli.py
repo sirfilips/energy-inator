@@ -40,7 +40,13 @@ def parse_args():
         "-r", "--rmsd-threshold",
         type=float,
         default=0.2,
-        help="Soglia RMSD (in Å) per il filtraggio di simmetria dei duplicati (default: 0.2)."
+        help="Soglia RMSD (in Å) per il filtraggio classico dei duplicati (default: 0.2)."
+    )
+    parser.add_argument(
+        "--post-dft-rmsd",
+        type=float,
+        default=0.15,
+        help="Soglia RMSD (in Å) post-DFT per deduplicare conformeri collassati (default: 0.15)."
     )
     parser.add_argument(
         "--ff",
@@ -72,6 +78,17 @@ def parse_args():
         type=str,
         default="6-31G(d)",
         help="Basis set per i calcoli quantistici Psi4 (default: 6-31G(d))."
+    )
+    parser.add_argument(
+        "--solvent",
+        type=str,
+        default=None,
+        help="Solvente implicito (modello PCM, es. water, chloroform, dmso, methanol, toluene)."
+    )
+    parser.add_argument(
+        "--frequencies",
+        action="store_true",
+        help="Calcola frequenze vibrazionali e correzioni termiche (Gibbs, ZPVE, Entropia) sul ground state."
     )
     parser.add_argument(
         "-t", "--threads",
@@ -123,8 +140,10 @@ def print_summary(res):
     print("=" * 65)
     print(f"Stato: Carica = {res.formal_charge}, Molteplicità = {res.spin_multiplicity}")
     print(f"Livello teorico: {res.method.upper()} / {res.basis}")
+    if res.solvent:
+        print(f"Solvatazione (PCM): {res.solvent.capitalize()}")
     print(f"Campo di forza: {res.force_field.upper()}")
-    print(f"Conformeri generati: {res.total_generated} | Filtrati FF: {res.unique_ff} | Calcolati DFT: {res.calculated_dft}")
+    print(f"Conformeri generati: {res.total_generated} | Filtrati FF: {res.unique_ff} | Calcolati DFT: {res.calculated_dft} | Unici DFT: {res.unique_dft}")
     print("-" * 65)
     print(f"Energia MINIMA (Minimo globale):  {res.min_energy_hartree:.6f} Hartree")
     print(f"                             --> {res.min_energy_kcalmol:.2f} kcal/mol")
@@ -160,6 +179,7 @@ def main():
                 smiles=smi,
                 n_conformers=args.n_conformers,
                 rmsd_threshold=args.rmsd_threshold,
+                post_dft_rmsd=args.post_dft_rmsd,
                 force_field=args.ff,
                 ff_energy_window=args.energy_window if args.energy_window > 0 else None,
                 top_n=args.top_n,
@@ -168,6 +188,8 @@ def main():
                 psi4_method=args.method,
                 psi4_basis=args.basis,
                 sp_only=args.sp_only,
+                solvent=args.solvent,
+                calc_frequencies=args.frequencies,
                 charge=args.charge,
                 multiplicity=args.multiplicity,
                 temperature_k=args.temp,
@@ -192,6 +214,7 @@ def main():
         smiles=smiles,
         n_conformers=args.n_conformers,
         rmsd_threshold=args.rmsd_threshold,
+        post_dft_rmsd=args.post_dft_rmsd,
         force_field=args.ff,
         ff_energy_window=args.energy_window if args.energy_window > 0 else None,
         top_n=args.top_n,
@@ -200,6 +223,8 @@ def main():
         psi4_method=args.method,
         psi4_basis=args.basis,
         sp_only=args.sp_only,
+        solvent=args.solvent,
+        calc_frequencies=args.frequencies,
         charge=args.charge,
         multiplicity=args.multiplicity,
         temperature_k=args.temp,
@@ -216,4 +241,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
