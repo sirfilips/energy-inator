@@ -39,6 +39,11 @@ class ConformerResult:
     xyz_optimized: Optional[str] = None
     output_path: Optional[str] = None
 
+    @property
+    def xyz(self) -> str:
+        """Returns optimized XYZ string if available, otherwise initial XYZ."""
+        return self.xyz_optimized or self.xyz_initial
+
 
 @dataclass
 class CalculationResult:

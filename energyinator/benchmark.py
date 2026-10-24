@@ -111,16 +111,20 @@ def _analyze_conformations_by_geometry(
 
     a0, a1, a2, a3 = match[:4]
 
-    # Measure dihedral for each conformer
+    # Measure dihedral for each conformer safely
     dihedrals = []
     for c in conformers:
-        if not c.xyz:
+        xyz_data = getattr(c, "xyz", None) or getattr(c, "xyz_optimized", None) or getattr(c, "xyz_initial", "")
+        if not xyz_data:
             dihedrals.append(None)
             continue
         try:
-            _, coords = parse_xyz(c.xyz)
-            d_val = calc_dihedral(coords[a0], coords[a1], coords[a2], coords[a3])
-            dihedrals.append(d_val)
+            _, coords = parse_xyz(xyz_data)
+            if len(coords) > max(a0, a1, a2, a3):
+                d_val = calc_dihedral(coords[a0], coords[a1], coords[a2], coords[a3])
+                dihedrals.append(d_val)
+            else:
+                dihedrals.append(None)
         except Exception:
             dihedrals.append(None)
 
