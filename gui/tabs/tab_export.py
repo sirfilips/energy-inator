@@ -57,6 +57,9 @@ def render_tab_export(res: CalculationResult):
             row["ZPVE (Eh)"] = f"{c.zpve_hartree:.5f}" if c.zpve_hartree is not None else "-"
             row["Entropia S"] = f"{c.entropy_cal_mol_k:.1f}" if c.entropy_cal_mol_k is not None else "-"
 
+        if getattr(res, "used_xtb", False):
+            row["Delta E xTB (kcal/mol)"] = f"{c.delta_xtb_kcalmol:.2f}" if c.delta_xtb_kcalmol is not None else "-"
+
         row.update({
             "Dipolo (Debye)": f"{c.dipole_debye:.2f}" if c.dipole_debye is not None else "-",
             "HOMO (eV)": f"{c.homo_ev:.2f}" if c.homo_ev is not None else "-",

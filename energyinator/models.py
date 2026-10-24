@@ -9,7 +9,14 @@ class ConformerResult:
     conf_id: int
     ff_energy: float
     delta_ff_kcalmol: float = 0.0
-    
+
+    # Semiempirical GFN-xTB results (Tier Intermedio)
+    xtb_energy_hartree: Optional[float] = None
+    xtb_energy_kcalmol: Optional[float] = None
+    delta_xtb_kcalmol: Optional[float] = None
+    xtb_gap_ev: Optional[float] = None
+    xtb_dipole_debye: Optional[float] = None
+
     # Quantum chemistry results (electronic)
     dft_energy_hartree: Optional[float] = None
     dft_energy_kcalmol: Optional[float] = None
@@ -55,6 +62,8 @@ class CalculationResult:
     basis: str
     force_field: str
     solvent: Optional[str] = None
+    used_xtb: bool = False
+    xtb_method: Optional[str] = None
     
     total_generated: int = 0
     unique_ff: int = 0

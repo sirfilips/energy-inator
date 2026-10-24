@@ -202,6 +202,8 @@ def generate_run_recipe(
             "method": res.method,
             "basis": res.basis,
             "force_field": res.force_field,
+            "used_xtb": getattr(res, "used_xtb", False),
+            "xtb_method": getattr(res, "xtb_method", None),
             "solvent": res.solvent,
             "has_frequencies": res.has_frequencies
         },

@@ -11,6 +11,13 @@ class CalculationConfig:
     force_field: str = "mmff94"  # "mmff94", "mmff94s", or "uff"
     ff_energy_window: Optional[float] = 10.0  # kcal/mol relative to FF minimum (None to disable)
     top_n: Optional[int] = None  # Max number of conformers for Psi4 (None for all)
+
+    # Semiempirical GFN-xTB intermediate tier settings
+    use_xtb: bool = False
+    xtb_method: str = "gfn2"  # "gfn2", "gfn1", "gfnff"
+    xtb_opt: bool = True  # Optimize geometry with xTB before DFT
+    xtb_energy_window: Optional[float] = 6.0  # kcal/mol relative to xTB minimum
+    xtb_top_n: Optional[int] = None  # Max conformers after xTB filtering to pass to Psi4
     
     # Psi4 quantum calculation settings
     psi4_memory: str = "8 GB"

@@ -39,6 +39,16 @@ def run_calculation_job(cfg: Dict[str, Any]):
     ]
     if cfg["limit_top_n"] and cfg["top_n_val"]:
         cmd.extend(["--top-n", str(int(cfg["top_n_val"]))])
+    if cfg.get("use_xtb"):
+        cmd.append("--use-xtb")
+        if cfg.get("xtb_method"):
+            cmd.extend(["--xtb-method", str(cfg["xtb_method"])])
+        if not cfg.get("xtb_opt", True):
+            cmd.append("--xtb-sp")
+        if cfg.get("xtb_window"):
+            cmd.extend(["--xtb-window", str(cfg["xtb_window"])])
+        if cfg.get("xtb_top_n"):
+            cmd.extend(["--xtb-top-n", str(int(cfg["xtb_top_n"]))])
     if cfg["sp_only"]:
         cmd.append("--sp-only")
     if cfg["solvent_val"]:

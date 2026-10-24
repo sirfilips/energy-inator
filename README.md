@@ -12,7 +12,8 @@ Include un'interfaccia grafica moderna in **Streamlit** che consente di visualiz
 
 - **Generazione Stocastica Multithread**: Campionamento conformazionale accelerato con algoritmo ETKDGv3 (`rdkit`).
 - **Supporto Campi di Forza Avanzati**: Pre-rilassamento geometrico con **MMFF94** (o MMFF94s), con fallback automatico su **UFF**.
-- **Screening Energetico a Imbuto (Energy Window)**: Scarto preventivo delle conformazioni ad alta tensione classica per abbattere i tempi computazionali quantistici.
+- **Tier Intermedio Semiempirico Quantistico (GFN-xTB)**: Raffinamento e filtraggio quantistico ultra-rapido con **GFN2-xTB / GFN1-xTB / GFN-FF** (Grimme Lab, Bonn) per un workflow gerarchico a 3 livelli: $\text{RDKit} \rightarrow \text{MMFF94} \rightarrow \text{GFN2-xTB} \rightarrow \text{Psi4 (DFT)}$.
+- **Screening Energetico a Imbuto (Energy Window)**: Scarto preventivo delle conformazioni ad alta tensione classica e semiempirica per abbattere i tempi computazionali quantistici.
 - **Deduplicazione RMSD Doppia (Pre & Post-DFT)**: Eliminazione rigorosa delle ridondanze geometriche classiche e post-ottimizzazione quantistica dei conformeri collassati nello stesso minimo locale.
 - **Riconoscimento Automatico di Carica e Molteplicità**: Rilevamento dello stato di carica formale e del numero di elettroni spaiati direttamente dalla struttura molecolare.
 - **Calcolo Quantomeccanico con Psi4**: Supporto per DFT ibrida (`B3LYP`, funzionali con dispersione empirica come `wB97X-D`, `PBE`, ecc.) e ab-initio (`HF`, `MP2`).
@@ -59,6 +60,11 @@ conda env create --prefix .\.venv -f environment.yml
 conda activate .\.venv
 ```
 
+Se disponi già di un ambiente Conda, puoi installare o aggiornare `xtb` con:
+```bash
+conda install -c conda-forge xtb
+```
+
 ---
 
 ## Utilizzo
@@ -103,6 +109,11 @@ L'interfaccia è strutturata in 5 ambienti specializzati:
 | `--ff` | | `mmff94` | Campo di forze: `mmff94`, `mmff94s`, `uff` |
 | `--energy-window` | `-w` | `10.0` | Finestra energetica FF in kcal/mol (0 per disattivare) |
 | `--top-n` | | `None` | Limite massimo di conformeri unici per Psi4 |
+| `--use-xtb` | | `False` | Abilita il tier intermedio semiempirico GFN-xTB |
+| `--xtb-method` | | `gfn2` | Metodo xTB (`gfn2`, `gfn1`, `gfnff`) |
+| `--xtb-sp` | | `False` | Solo Single-Point con xTB (senza rilassamento geometrico) |
+| `--xtb-window` | | `6.0` | Finestra energetica xTB in kcal/mol per filtraggio pre-DFT |
+| `--xtb-top-n` | | `None` | Max conformeri xTB da inviare a Psi4 |
 | `--method` | `-m` | `b3lyp` | Metodo quantistico (`b3lyp`, `wb97x-d`, `pbe`, ecc.) |
 | `--basis` | `-b` | `6-31G(d)` | Basis set quantistico per Psi4 |
 | `--solvent` | | `None` | Solvente implicito PCM (`water`, `chloroform`, `dmso`, ecc.) |

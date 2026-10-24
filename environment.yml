@@ -5,6 +5,7 @@ dependencies:
   - python>=3.10
   - psi4
   - rdkit
+  - xtb
   - pandas
   - tqdm
   - openpyxl

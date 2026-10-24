@@ -68,6 +68,35 @@ def parse_args():
         help="Numero massimo di conformeri unici da calcolare con Psi4 (default: calcola tutti quelli entro la finestra)."
     )
     parser.add_argument(
+        "--use-xtb",
+        action="store_true",
+        help="Abilita il tier intermedio semiempirico GFN-xTB prima dei calcoli ab initio DFT."
+    )
+    parser.add_argument(
+        "--xtb-method",
+        type=str,
+        default="gfn2",
+        choices=["gfn2", "gfn1", "gfnff"],
+        help="Metodo semiempirico xTB (default: gfn2; opzioni: gfn1, gfnff)."
+    )
+    parser.add_argument(
+        "--xtb-sp",
+        action="store_true",
+        help="Esegue solo Single-Point con xTB invece dell'ottimizzazione di geometria."
+    )
+    parser.add_argument(
+        "--xtb-window",
+        type=float,
+        default=6.0,
+        help="Finestra energetica xTB in kcal/mol per filtrare i conformeri prima di Psi4 (default: 6.0)."
+    )
+    parser.add_argument(
+        "--xtb-top-n",
+        type=int,
+        default=None,
+        help="Numero massimo di conformeri xTB da inviare a Psi4."
+    )
+    parser.add_argument(
         "-m", "--method",
         type=str,
         default="b3lyp",
@@ -183,6 +212,11 @@ def main():
                 force_field=args.ff,
                 ff_energy_window=args.energy_window if args.energy_window > 0 else None,
                 top_n=args.top_n,
+                use_xtb=args.use_xtb,
+                xtb_method=args.xtb_method,
+                xtb_opt=not args.xtb_sp,
+                xtb_energy_window=args.xtb_window if args.xtb_window > 0 else None,
+                xtb_top_n=args.xtb_top_n,
                 psi4_memory=args.memory,
                 psi4_threads=args.threads,
                 psi4_method=args.method,
@@ -218,6 +252,11 @@ def main():
         force_field=args.ff,
         ff_energy_window=args.energy_window if args.energy_window > 0 else None,
         top_n=args.top_n,
+        use_xtb=args.use_xtb,
+        xtb_method=args.xtb_method,
+        xtb_opt=not args.xtb_sp,
+        xtb_energy_window=args.xtb_window if args.xtb_window > 0 else None,
+        xtb_top_n=args.xtb_top_n,
         psi4_memory=args.memory,
         psi4_threads=args.threads,
         psi4_method=args.method,

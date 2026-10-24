@@ -7,6 +7,25 @@ from gui.services.export import mol_file_to_smiles
 from energyinator.models import CalculationResult
 
 PROFILES = {
+    "Workflow Gerarchico a 3 Livelli (GFN2-xTB + DFT)": {
+        "n_confs": 50,
+        "rmsd": 0.15,
+        "post_rmsd": 0.15,
+        "ff": "mmff94",
+        "enable_window": True,
+        "window": 15.0,
+        "use_xtb": True,
+        "xtb_method": "gfn2",
+        "xtb_opt": True,
+        "xtb_window": 6.0,
+        "xtb_top_n": 5,
+        "method": "b3lyp",
+        "basis": "6-31G(d)",
+        "solvent": "Nessuno / Gas (Vuoto)",
+        "sp_only": False,
+        "calc_freq": False,
+        "desc": "Workflow scientifico avanzato: 50 conformeri RDKit -> pre-relax MMFF94 -> raffinamento quantistico semiempirico GFN2-xTB -> DFT finale su top 5."
+    },
     "Profilo Legacy": {
         "n_confs": 50,
         "rmsd": 0.20,
@@ -14,6 +33,7 @@ PROFILES = {
         "ff": "uff",
         "enable_window": False,
         "window": 0.0,
+        "use_xtb": False,
         "method": "b3lyp",
         "basis": "6-31G(d)",
         "solvent": "Nessuno / Gas (Vuoto)",
@@ -28,6 +48,7 @@ PROFILES = {
         "ff": "mmff94",
         "enable_window": True,
         "window": 10.0,
+        "use_xtb": False,
         "method": "b3lyp",
         "basis": "6-31G(d)",
         "solvent": "Nessuno / Gas (Vuoto)",
@@ -42,6 +63,7 @@ PROFILES = {
         "ff": "mmff94",
         "enable_window": True,
         "window": 10.0,
+        "use_xtb": False,
         "method": "b3lyp",
         "basis": "6-31G(d)",
         "solvent": "Acqua (Water)",
@@ -56,6 +78,7 @@ PROFILES = {
         "ff": "mmff94",
         "enable_window": True,
         "window": 12.0,
+        "use_xtb": False,
         "method": "wb97x-d",
         "basis": "def2-SVP",
         "solvent": "Nessuno / Gas (Vuoto)",
@@ -70,6 +93,7 @@ PROFILES = {
         "ff": "mmff94",
         "enable_window": True,
         "window": 8.0,
+        "use_xtb": False,
         "method": "b3lyp",
         "basis": "3-21G",
         "solvent": "Nessuno / Gas (Vuoto)",
@@ -84,6 +108,7 @@ PROFILES = {
         "ff": "mmff94",
         "enable_window": True,
         "window": 10.0,
+        "use_xtb": False,
         "method": "b3lyp",
         "basis": "6-31G(d)",
         "solvent": "Nessuno / Gas (Vuoto)",
@@ -359,6 +384,43 @@ def render_sidebar():
         limit_top_n = st.checkbox("Limita conformeri inviati a DFT", value=False)
         top_n_val = st.number_input("Max conformeri per DFT:", min_value=1, max_value=50, value=10) if limit_top_n else None
 
+    # Semiempirical Intermediate Screening Tier (GFN-xTB)
+    from energyinator.xtb import is_xtb_available, get_xtb_version
+    xtb_installed = is_xtb_available()
+
+    with st.sidebar.expander("Tier Intermedio Semiempirico (GFN-xTB)", expanded=pref.get("use_xtb", False)):
+        if xtb_installed:
+            st.caption(f":green[**xTB Rilevato:**] {get_xtb_version()}")
+        else:
+            st.caption(":orange[**xTB non trovato.** Installare tramite Conda per abilitare.]")
+
+        use_xtb = st.checkbox(
+            "Abilita Tier Semiempirico GFN-xTB",
+            value=pref.get("use_xtb", False) and xtb_installed,
+            disabled=not xtb_installed,
+            key=f"use_xtb_{profile_choice}",
+            help="Esegue un raffinamento e filtraggio quantistico semiempirico preliminare dei conformeri generati prima di procedere a Psi4 DFT."
+        )
+
+        xtb_method = "gfn2"
+        xtb_opt = True
+        xtb_window = 6.0
+        xtb_top_n = None
+
+        if use_xtb:
+            xtb_method = st.selectbox(
+                "Metodo xTB:",
+                ["gfn2", "gfn1", "gfnff"],
+                index=0 if pref.get("xtb_method", "gfn2") == "gfn2" else (1 if pref.get("xtb_method") == "gfn1" else 2),
+                format_func=lambda m: {"gfn2": "GFN2-xTB (Standard raccomandato)", "gfn1": "GFN1-xTB (Rapido)", "gfnff": "GFN-FF (Campo di Forze Avanzato)"}[m],
+                key=f"xtb_m_{profile_choice}"
+            )
+            xtb_opt = st.checkbox("Ottimizza geometrie con xTB", value=pref.get("xtb_opt", True), key=f"xtb_opt_{profile_choice}")
+            xtb_window = st.slider("Finestra energetica xTB (kcal/mol):", 1.0, 20.0, float(pref.get("xtb_window", 6.0)), 0.5, key=f"xtb_win_{profile_choice}")
+            limit_xtb_top = st.checkbox("Limita conformeri xTB inviati a DFT", value=pref.get("xtb_top_n") is not None, key=f"lim_xtb_{profile_choice}")
+            if limit_xtb_top:
+                xtb_top_n = st.number_input("Max conformeri xTB per DFT:", min_value=1, max_value=50, value=int(pref.get("xtb_top_n", 5)), key=f"xtb_top_{profile_choice}")
+
     # Quantum Chemistry Parameters
     with st.sidebar.expander("Motore Quantistico (Psi4)", expanded=True):
         method = st.selectbox("Metodo Quantistico:", method_list, index=method_idx, key=f"m_{profile_choice}")
@@ -395,6 +457,11 @@ def render_sidebar():
         "energy_window": energy_window,
         "limit_top_n": limit_top_n,
         "top_n_val": top_n_val,
+        "use_xtb": use_xtb,
+        "xtb_method": xtb_method,
+        "xtb_opt": xtb_opt,
+        "xtb_window": xtb_window,
+        "xtb_top_n": xtb_top_n,
         "method": method,
         "basis": basis,
         "solv_choice": solv_choice,

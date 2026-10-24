@@ -78,6 +78,61 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
         if not selected_confs:
             raise RuntimeError("Nessun conformero ha superato la fase di filtraggio classico.")
 
+        # 5.5 Optional: Semiempirical GFN-xTB intermediate screening tier
+        xtb_used = False
+        xtb_method_used = None
+        confs_for_dft: List[ConformerResult] = []
+
+        if config.use_xtb:
+            from energyinator.xtb import is_xtb_available, refine_conformers_with_xtb
+            if is_xtb_available():
+                logger.info("=" * 65)
+                logger.info(f"  TIER INTERMEDIO: Raffinamento Semiempirico GFN-xTB ({config.xtb_method.upper()})")
+                logger.info("=" * 65)
+
+                initial_xtb_confs = []
+                for conf_id, ff_energy, delta_ff in selected_confs:
+                    xyz_b = Chem.MolToXYZBlock(mol, confId=conf_id)
+                    c_obj = ConformerResult(
+                        conf_id=conf_id,
+                        ff_energy=ff_energy,
+                        delta_ff_kcalmol=delta_ff,
+                        xyz_initial=xyz_b,
+                        xyz_optimized=xyz_b
+                    )
+                    initial_xtb_confs.append(c_obj)
+
+                xtb_refined = refine_conformers_with_xtb(
+                    conformers=initial_xtb_confs,
+                    method=config.xtb_method,
+                    opt=config.xtb_opt,
+                    charge=charge,
+                    multiplicity=multiplicity,
+                    solvent=config.solvent,
+                    energy_window_kcalmol=config.xtb_energy_window,
+                    top_n=config.xtb_top_n or config.top_n,
+                    threads=config.psi4_threads
+                )
+                if xtb_refined:
+                    xtb_used = True
+                    xtb_method_used = config.xtb_method.upper()
+                    confs_for_dft = xtb_refined
+            else:
+                logger.warning("xTB richiesto ma eseguibile non trovato nel sistema. Procedo con workflow DFT classico.")
+
+        if not confs_for_dft:
+            for conf_id, ff_energy, delta_ff in selected_confs:
+                xyz_b = Chem.MolToXYZBlock(mol, confId=conf_id)
+                confs_for_dft.append(
+                    ConformerResult(
+                        conf_id=conf_id,
+                        ff_energy=ff_energy,
+                        delta_ff_kcalmol=delta_ff,
+                        xyz_initial=xyz_b,
+                        xyz_optimized=xyz_b
+                    )
+                )
+
         # 6. Setup Psi4
         scratch_dir = os.path.join(output_dir, "scratch")
         setup_psi4(
@@ -92,17 +147,18 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
         smiles_clean = Chem.MolToSmiles(Chem.RemoveHs(mol))
         calc_type_desc = "Single-Point" if config.sp_only else "Ottimizzazione"
         logger.info(
-            f"Avvio calcoli quantistici Psi4 ({calc_type_desc}) su {len(selected_confs)} conformeri "
+            f"Avvio calcoli quantistici Psi4 ({calc_type_desc}) su {len(confs_for_dft)} conformeri "
             f"[Metodo: {config.psi4_method}, Base: {config.psi4_basis}]..."
         )
 
         conformer_results = []
         effective_method_used = config.psi4_method
-        total_selected = len(selected_confs)
+        total_selected = len(confs_for_dft)
 
-        for idx, (conf_id, ff_energy, delta_ff) in enumerate(tqdm(selected_confs, desc="Psi4 Quantum", unit="conf"), 1):
+        for idx, c_in in enumerate(tqdm(confs_for_dft, desc="Psi4 Quantum", unit="conf"), 1):
+            conf_id = c_in.conf_id
             logger.info(f"Progresso DFT: [{idx}/{total_selected}] Conformero {conf_id} ({idx}/{total_selected})...")
-            xyz_block = Chem.MolToXYZBlock(mol, confId=conf_id)
+            xyz_block = c_in.xyz_optimized or c_in.xyz_initial
             
             calc_out = run_psi4_calculation(
                 xyz_block=xyz_block,
@@ -121,8 +177,13 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
                 effective_method_used = calc_out.get("method_used", config.psi4_method)
                 c_res = ConformerResult(
                     conf_id=conf_id,
-                    ff_energy=ff_energy,
-                    delta_ff_kcalmol=delta_ff,
+                    ff_energy=c_in.ff_energy,
+                    delta_ff_kcalmol=c_in.delta_ff_kcalmol,
+                    xtb_energy_hartree=c_in.xtb_energy_hartree,
+                    xtb_energy_kcalmol=c_in.xtb_energy_kcalmol,
+                    delta_xtb_kcalmol=c_in.delta_xtb_kcalmol,
+                    xtb_gap_ev=c_in.xtb_gap_ev,
+                    xtb_dipole_debye=c_in.xtb_dipole_debye,
                     dft_energy_hartree=calc_out["energy_hartree"],
                     dft_energy_kcalmol=calc_out["energy_kcalmol"],
                     dft_energy_ev=calc_out["energy_ev"],
@@ -130,7 +191,7 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
                     homo_ev=calc_out.get("homo_ev"),
                     lumo_ev=calc_out.get("lumo_ev"),
                     gap_ev=calc_out.get("gap_ev"),
-                    xyz_initial=xyz_block,
+                    xyz_initial=c_in.xyz_initial,
                     xyz_optimized=calc_out["xyz_optimized"]
                 )
                 conformer_results.append(c_res)
@@ -208,6 +269,8 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
             basis=config.psi4_basis,
             force_field=effective_ff,
             solvent=config.solvent,
+            used_xtb=xtb_used,
+            xtb_method=xtb_method_used,
             total_generated=len(initial_ids),
             unique_ff=len(selected_confs),
             calculated_dft=len(conformer_results),
