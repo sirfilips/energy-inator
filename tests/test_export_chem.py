@@ -81,3 +81,4 @@ def test_generate_run_recipe():
     assert recipe["ensemble_results_summary"]["ensemble_dipole_debye"] == 1.85
     assert recipe["ensemble_results_summary"]["conformational_entropy_cal_mol_k"] == 1.38
     assert "rdkit_version" in recipe["platform"]
+

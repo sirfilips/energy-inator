@@ -44,3 +44,4 @@ def test_calculate_ensemble_observables():
     # Free energy term: -T * S / 1000 = -298.15 * 1.377 / 1000 = -0.41 kcal/mol
     expected_g = -(298.15 * expected_s) / 1000.0
     assert math.isclose(obs["conformational_free_energy_kcalmol"], expected_g, abs_tol=0.05)
+
