@@ -243,28 +243,94 @@ def render_sidebar():
 
     # Scientific Benchmark Suite
     with st.sidebar.expander("Validazione & Benchmark Scientifico", expanded=False):
-        st.caption("Suite di validazione accademica: calcola l'accuratezza contro equilibri e barriere di riferimento di letteratura.")
-        if st.button("Esegui Benchmark Rapido", icon=":material/speed:", key="btn_run_benchmark"):
-            with st.spinner("Esecuzione benchmark su molecole modello (Butano, 1,2-Etandiolo, Cicloesano)..."):
+        st.caption("Verifica l'accuratezza del protocollo quantistico/campo di forze su equilibri conformazionali noti con dati CCSD(T)/CBS di letteratura.")
+
+        bench_opts = {
+            "all": "Tutti i Sistemi (Suite Completa)",
+            "butane": "n-Butano (Sterico Anti vs Gauche)",
+            "ethylene_glycol": "1,2-Etandiolo (Legame H intramolecolare)",
+            "cyclohexane": "Cicloesano (Sedia vs Barca)"
+        }
+        sel_bench_sys = st.selectbox(
+            "Sistema da testare:",
+            options=list(bench_opts.keys()),
+            format_func=lambda k: bench_opts[k],
+            key="sel_bench_system_key"
+        )
+
+        use_active_setup = st.checkbox(
+            "Usa parametri attivi dell'app",
+            value=True,
+            help="Se attivo, esegue il benchmark col metodo DFT, la base e il campo di forze correnti. Se disattivato, usa un preset rapido (B3LYP/3-21G)."
+        )
+
+        btn_bench = st.button("Avvia Validazione Benchmark", icon=":material/speed:", key="btn_run_benchmark", use_container_width=True)
+        if btn_bench:
+            with st.spinner("Esecuzione validazione benchmark in corso..."):
                 from energyinator.benchmark import run_benchmark
-                bench_data = run_benchmark(method="b3lyp", basis="3-21G", sp_only=True)
+                if use_active_setup:
+                    cur_method = st.session_state.get(f"m_{profile_choice}", pref["method"])
+                    cur_basis = st.session_state.get(f"b_{profile_choice}", pref["basis"])
+                    cur_ff = st.session_state.get(f"ff_{profile_choice}", pref["ff"])
+                    cur_solv = SOLVENT_MAP.get(st.session_state.get(f"s_{profile_choice}", pref.get("solvent", "Nessuno / Gas (Vuoto)")))
+                else:
+                    cur_method = "b3lyp"
+                    cur_basis = "3-21G"
+                    cur_ff = "mmff94"
+                    cur_solv = None
+
+                target_list = [sel_bench_sys] if sel_bench_sys != "all" else None
+                bench_data = run_benchmark(
+                    systems=target_list,
+                    method=cur_method,
+                    basis=cur_basis,
+                    force_field=cur_ff,
+                    solvent=cur_solv,
+                    sp_only=True
+                )
                 st.session_state["benchmark_results"] = bench_data
-                st.success("Benchmark completato!")
+                st.success("Validazione benchmark completata!")
+                st.rerun()
 
         if "benchmark_results" in st.session_state:
             b_res = st.session_state["benchmark_results"]
-            st.dataframe(
-                b_res["df_results"][["System", "Status", "Delta_E_Calc", "Delta_E_Ref", "Error", "Elapsed_s"]],
-                hide_index=True
-            )
-            st.caption(f"**MAE:** {b_res['mean_absolute_error_kcalmol']} kcal/mol &bull; **Tempo:** {b_res['total_elapsed_s']} s")
-            csv_data = b_res["df_results"].to_csv(index=False).encode('utf-8')
+            mae = b_res["mean_absolute_error_kcalmol"]
+
+            st.markdown("---")
+            st.markdown(f"**Setup:** `{b_res['method']}/{b_res['basis']}` ({b_res['solvent']})")
+            mae_color = "green" if mae <= 0.5 else "orange"
+            st.markdown(f"**MAE:** :{mae_color}[**{mae:.2f} kcal/mol**] &bull; Tempo: `{b_res['total_elapsed_s']} s`")
+
+            # Display simplified table
+            st.dataframe(b_res["df_display"], hide_index=True, use_container_width=True)
+
+            with st.expander("Dettagli Metodologici & Citazioni", expanded=False):
+                for _, row in b_res["df_results"].iterrows():
+                    st.markdown(f"**{row['Sistema']}**")
+                    st.caption(f"**Processo:** {row['Processo_Conformazionale']}")
+                    st.caption(f"**Riferimento:** {row['Citazione_Letteratura']} ({row['Livello_Riferimento']})")
+                    st.caption(f"**Geometria:** {row['Note_Geometriche']}")
+                    st.caption(f"**Significato:** {row['Significato_Scientifico']}")
+                    st.markdown("---")
+
+            # Standardized and informative exports
+            csv_data = b_res["csv_content"].encode('utf-8')
             st.download_button(
-                "Esporta Tabella Tesi (CSV)",
+                "Esporta Risultati Benchmark (CSV)",
                 data=csv_data,
-                file_name="benchmark_energyinator.csv",
+                file_name=f"report_benchmark_{b_res['method'].lower()}_{b_res['basis']}.csv",
                 mime="text/csv",
                 icon=":material/download:",
+                use_container_width=True
+            )
+
+            md_data = b_res["markdown_report"].encode('utf-8')
+            st.download_button(
+                "Esporta Relazione Metodologica (Markdown)",
+                data=md_data,
+                file_name=f"relazione_benchmark_{b_res['method'].lower()}_{b_res['basis']}.md",
+                mime="text/markdown",
+                icon=":material/description:",
                 use_container_width=True
             )
 
