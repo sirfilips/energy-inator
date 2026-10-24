@@ -240,3 +240,4 @@ Se utilizzi **Energyinator** per attività di ricerca, tesi di laurea o pubblica
 ## Licenza
 
 Questo progetto è distribuito sotto licenza **MIT License** - vedi il file [LICENSE](LICENSE) per i dettagli.
+
