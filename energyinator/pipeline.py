@@ -15,7 +15,13 @@ from energyinator.conformers import (
     deduplicate_post_dft
 )
 from energyinator.quantum import setup_psi4, close_psi4, run_psi4_calculation, cleanup_psi4_residual_files
-from energyinator.analysis import calculate_thermodynamics
+from energyinator.analysis import calculate_thermodynamics, calculate_ensemble_observables
+from energyinator.export_chem import (
+    generate_orca_input,
+    generate_gaussian_input,
+    generate_multi_xyz_trajectory,
+    generate_run_recipe
+)
 from energyinator.io import setup_run_logger, close_run_logger, save_conformer_xyz, export_results_excel
 
 logger = logging.getLogger("energyinator")
@@ -181,6 +187,12 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
         # 11. Export Excel
         excel_path = export_results_excel(output_dir, processed_confs, timestamp)
 
+        # 11b. Calculate Ensemble Observables (Boltzmann-weighted averages & S_conf)
+        ensemble_props = calculate_ensemble_observables(
+            processed_confs,
+            temperature_k=config.temperature_k
+        )
+
         # 12. Summary result building
         best_conf = processed_confs[0]
         worst_conf = processed_confs[-1]
@@ -211,11 +223,61 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
             best_output_path=best_conf.output_path,
             worst_xyz_optimized=worst_conf.xyz_optimized,
             worst_output_path=worst_conf.output_path,
+            ensemble_dipole_debye=ensemble_props.get("ensemble_dipole_debye"),
+            ensemble_homo_ev=ensemble_props.get("ensemble_homo_ev"),
+            ensemble_lumo_ev=ensemble_props.get("ensemble_lumo_ev"),
+            ensemble_gap_ev=ensemble_props.get("ensemble_gap_ev"),
+            conformational_entropy_cal_mol_k=ensemble_props.get("conformational_entropy_cal_mol_k"),
+            conformational_free_energy_kcalmol=ensemble_props.get("conformational_free_energy_kcalmol"),
             conformers=processed_confs,
             elapsed_time=elapsed,
             output_dir=output_dir,
             excel_path=excel_path
         )
+
+        # 12b. FAIR Interoperability Exports (ORCA, Gaussian, Multi-XYZ, Recipe)
+        try:
+            # Trajectory multi-XYZ
+            traj_str = generate_multi_xyz_trajectory(processed_confs, smiles=config.smiles)
+            traj_path = os.path.join(output_dir, f"trajectory_ensemble_{timestamp}.xyz")
+            with open(traj_path, "w", encoding="utf-8") as f:
+                f.write(traj_str)
+
+            # ORCA input for ground state
+            orca_str = generate_orca_input(
+                best_conf,
+                method=config.psi4_method,
+                basis=config.psi4_basis,
+                solvent=config.solvent,
+                charge=charge,
+                multiplicity=multiplicity,
+                nprocs=config.psi4_threads
+            )
+            with open(os.path.join(output_dir, "input_orca_minimo.inp"), "w", encoding="utf-8") as f:
+                f.write(orca_str)
+
+            # Gaussian input for ground state
+            gau_str = generate_gaussian_input(
+                best_conf,
+                method=config.psi4_method,
+                basis=config.psi4_basis,
+                solvent=config.solvent,
+                charge=charge,
+                multiplicity=multiplicity,
+                nprocs=config.psi4_threads,
+                memory=config.psi4_memory
+            )
+            with open(os.path.join(output_dir, "input_gaussian_minimo.gjf"), "w", encoding="utf-8") as f:
+                f.write(gau_str)
+
+            # FAIR Run Recipe
+            recipe_data = generate_run_recipe(res)
+            with open(os.path.join(output_dir, "calculation_recipe.json"), "w", encoding="utf-8") as f:
+                json.dump(recipe_data, f, indent=2)
+                
+            logger.info("Pacchetto di interoperabilità FAIR esportato (ORCA, Gaussian, Trajectory XYZ, Recipe JSON).")
+        except Exception as e_fair:
+            logger.warning(f"Impossibile generare file di interoperabilità FAIR: {e_fair}")
 
         # 13. Save structured JSON for GUI and automated pipelines
         json_path = os.path.join(output_dir, "result.json")

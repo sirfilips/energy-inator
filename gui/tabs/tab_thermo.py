@@ -57,7 +57,39 @@ def render_tab_thermo(res: CalculationResult):
         )
         st_plotly_stretched(fig_pie)
 
-    # Dipole Moments
+    # Ensemble-averaged Observables & Conformational Entropy Card
+    ens_dip = getattr(res, "ensemble_dipole_debye", None)
+    ens_gap = getattr(res, "ensemble_gap_ev", None)
+    s_conf = getattr(res, "conformational_entropy_cal_mol_k", None)
+    g_conf = getattr(res, "conformational_free_energy_kcalmol", None)
+
+    st.markdown("---")
+    st.markdown("#### Proprietà Medie d'Insieme & Termodinamica Conformazionale")
+    st.caption("Proprietà macroscopiche osservabili calcolate come media ponderata di Boltzmann su tutto l'insieme:")
+
+    c_ens1, c_ens2, c_ens3, c_ens4 = st.columns(4)
+    c_ens1.metric(
+        label="Dipolo Medio ⟨μ⟩",
+        value=f"{ens_dip:.2f} D" if ens_dip is not None else "-",
+        delta=f"Ground: {res.conformers[0].dipole_debye:.2f} D" if (res.conformers and res.conformers[0].dipole_debye is not None) else None,
+        delta_color="off"
+    )
+    c_ens2.metric(
+        label="Band Gap Medio ⟨Gap⟩",
+        value=f"{ens_gap:.2f} eV" if ens_gap is not None else "-",
+        delta=f"Ground: {res.conformers[0].gap_ev:.2f} eV" if (res.conformers and res.conformers[0].gap_ev is not None) else None,
+        delta_color="off"
+    )
+    c_ens3.metric(
+        label="Entropia Conformazionale S_conf",
+        value=f"{s_conf:.2f} cal/(mol*K)" if s_conf is not None else "-",
+        help="Contributo entropico configurazionale di miscelamento dell'insieme: S = -R * sum(p_i * ln(p_i))"
+    )
+    c_ens4.metric(
+        label="Stabilizzazione Libera (-T·S_conf)",
+        value=f"{g_conf:.3f} kcal/mol" if g_conf is not None else "-",
+        help="Stabilizzazione sull'energia libera di Gibbs derivante dalla molteplicità dell'insieme conformazionale a 298.15 K."
+    )
     has_dipoles = any(c.dipole_debye is not None for c in res.conformers)
     if has_dipoles:
         st.markdown("---")

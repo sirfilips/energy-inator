@@ -1,13 +1,20 @@
-"""File export and molecular file parsing utilities for GUI."""
+"""File export and molecular file parsing utilities for GUI with FAIR computational chemistry support."""
 
 import io
 import os
+import glob
 import zipfile
 from datetime import datetime
 from typing import Optional
 from rdkit import Chem
 
 from energyinator.models import CalculationResult
+from energyinator.export_chem import (
+    generate_orca_input,
+    generate_gaussian_input,
+    generate_multi_xyz_trajectory,
+    generate_run_recipe
+)
 
 
 def mol_file_to_smiles(file_bytes: bytes, filename: str) -> Optional[str]:
@@ -27,7 +34,14 @@ def mol_file_to_smiles(file_bytes: bytes, filename: str) -> Optional[str]:
 
 
 def create_zip_bundle(res: CalculationResult) -> bytes:
-    """Creates an in-memory ZIP bundle with XYZ geometries, Excel table, JSON, and summary report."""
+    """Creates a comprehensive in-memory ZIP bundle with:
+      - Excel spreadsheet (.xlsx)
+      - JSON results and FAIR run recipe (.json)
+      - ORCA and Gaussian input templates (.inp, .gjf)
+      - Multi-frame trajectory file (.xyz)
+      - Individual conformer XYZ files
+      - Executive summary text report
+    """
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         if res.excel_path and os.path.exists(res.excel_path):
@@ -37,31 +51,85 @@ def create_zip_bundle(res: CalculationResult) -> bytes:
         elif os.path.isdir(res.output_dir) and os.path.exists(os.path.join(res.output_dir, "result.json")):
             zf.write(os.path.join(res.output_dir, "result.json"), arcname="result.json")
 
+        # Include individual conformers
         for c in res.conformers:
             if c.output_path and os.path.exists(c.output_path):
                 zf.write(c.output_path, arcname=os.path.basename(c.output_path))
             elif c.xyz_optimized:
                 zf.writestr(f"conformer_{c.conf_id}.xyz", c.xyz_optimized)
 
+        # Include FAIR computational chemistry files if available on disk or generate them
+        if res.conformers:
+            best_conf = res.conformers[0]
+            
+            # ORCA input
+            orca_file = os.path.join(res.output_dir, "input_orca_minimo.inp")
+            if os.path.exists(orca_file):
+                zf.write(orca_file, arcname="input_orca_minimo.inp")
+            else:
+                zf.writestr("input_orca_minimo.inp", generate_orca_input(
+                    best_conf, method=res.method, basis=res.basis, solvent=res.solvent,
+                    charge=res.formal_charge, multiplicity=res.spin_multiplicity
+                ))
+
+            # Gaussian input
+            gau_file = os.path.join(res.output_dir, "input_gaussian_minimo.gjf")
+            if os.path.exists(gau_file):
+                zf.write(gau_file, arcname="input_gaussian_minimo.gjf")
+            else:
+                zf.writestr("input_gaussian_minimo.gjf", generate_gaussian_input(
+                    best_conf, method=res.method, basis=res.basis, solvent=res.solvent,
+                    charge=res.formal_charge, multiplicity=res.spin_multiplicity
+                ))
+
+            # Multi-XYZ trajectory
+            trajs = glob.glob(os.path.join(res.output_dir, "trajectory_ensemble_*.xyz"))
+            if trajs and os.path.exists(trajs[0]):
+                zf.write(trajs[0], arcname="trajectory_ensemble.xyz")
+            else:
+                zf.writestr("trajectory_ensemble.xyz", generate_multi_xyz_trajectory(res.conformers, smiles=res.smiles))
+
+            # FAIR Run Recipe
+            recipe_file = os.path.join(res.output_dir, "calculation_recipe.json")
+            if os.path.exists(recipe_file):
+                zf.write(recipe_file, arcname="calculation_recipe.json")
+            else:
+                import json
+                zf.writestr("calculation_recipe.json", json.dumps(generate_run_recipe(res), indent=2))
+
+        # Scientific report
+        ens_dip = getattr(res, "ensemble_dipole_debye", None)
+        ens_gap = getattr(res, "ensemble_gap_ev", None)
+        s_conf = getattr(res, "conformational_entropy_cal_mol_k", None)
+        g_conf = getattr(res, "conformational_free_energy_kcalmol", None)
+
         report_lines = [
-            "=" * 60,
-            "ENERGY-INATOR - REPORT DI CALCOLO MOLECOLARE",
-            "=" * 60,
-            f"Data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            f"SMILES Target: {res.smiles}",
-            f"Metodo / Base: {res.method.upper()} / {res.basis}",
+            "=" * 65,
+            "ENERGY-INATOR - REPORT SCIENTIFICO DI MODELLISTICA CONFORMAZIONALE",
+            "=" * 65,
+            f"Data di calcolo: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"SMILES bersaglio: {res.smiles}",
+            f"Livello di Teoria: {res.method.upper()} / {res.basis}",
             f"Campo di Forze: {res.force_field.upper()}",
-            f"Solvente PCM: {res.solvent if res.solvent else 'Fase gassosa'}",
+            f"Solvente PCM: {res.solvent if res.solvent else 'Fase gassosa (Vuoto)'}",
             f"Conformeri generati: {res.total_generated} | Unici DFT: {res.unique_dft}",
             f"Minimo Globale: {res.min_energy_hartree:.6f} Eh ({res.min_energy_kcalmol:.2f} kcal/mol)",
             f"Tempo di calcolo: {res.elapsed_time:.1f} s",
+            "",
+            "OSSERVABILI MACROSCOPICI D'INSIEME (BOLTZMANN WEIGHTED):",
+            f"  - Momento di Dipolo medio <mu>: {f'{ens_dip:.2f} Debye' if ens_dip is not None else 'N/A'}",
+            f"  - Band Gap medio <HOMO-LUMO>:   {f'{ens_gap:.2f} eV' if ens_gap is not None else 'N/A'}",
+            f"  - Entropia conformazionale S_conf: {f'{s_conf:.2f} cal/(mol*K)' if s_conf is not None else 'N/A'}",
+            f"  - Stabilizzazione libera (-T*S_conf): {f'{g_conf:.3f} kcal/mol' if g_conf is not None else 'N/A'}",
             "",
             "DETTAGLIO CONFORMERI:",
             f"{'Conf':<8} {'Delta E (kcal/mol)':<20} {'Popolazione (%)':<16} {'Degenerazione':<14}"
         ]
         for c in res.conformers:
             report_lines.append(f"Conf {c.conf_id:<3d} {c.delta_dft_kcalmol:<20.2f} {c.boltzmann_pop:<16.1f} {c.degeneracy:<14d}")
-        zf.writestr("report_sintetico.txt", "\n".join(report_lines))
+        
+        report_lines.append("=" * 65)
+        zf.writestr("report_scientifico.txt", "\n".join(report_lines))
+    
     buf.seek(0)
     return buf.getvalue()
-

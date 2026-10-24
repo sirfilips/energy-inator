@@ -28,8 +28,10 @@ def render_hero_summary(res: CalculationResult):
     ground_deg = best_conf.degeneracy if best_conf else 1
     delta_span = (res.max_energy_kcalmol - res.min_energy_kcalmol)
     
-    dipole_str = f"{best_conf.dipole_debye:.2f} D" if best_conf and best_conf.dipole_debye is not None else "-"
-    gap_str = f"{best_conf.gap_ev:.2f} eV" if best_conf and best_conf.gap_ev is not None else "-"
+    ens_dip = getattr(res, "ensemble_dipole_debye", None)
+    ens_gap = getattr(res, "ensemble_gap_ev", None)
+    dipole_str = f"⟨μ⟩ = {ens_dip:.2f} D" if ens_dip is not None else (f"{best_conf.dipole_debye:.2f} D" if best_conf and best_conf.dipole_debye is not None else "-")
+    gap_str = f"⟨Gap⟩ = {ens_gap:.2f} eV" if ens_gap is not None else (f"{best_conf.gap_ev:.2f} eV" if best_conf and best_conf.gap_ev is not None else "-")
     solv_label = res.solvent.capitalize() if res.solvent else "Gas / Vuoto"
 
     with st.container(border=True):

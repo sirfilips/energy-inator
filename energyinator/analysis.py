@@ -1,12 +1,13 @@
 import math
 import logging
-from typing import List
+from typing import List, Dict, Optional
 from energyinator.models import ConformerResult
 
 logger = logging.getLogger("energyinator")
 
 # Universal gas constant in kcal / (mol * K)
 R_GAS_KCAL = 1.98720425864083e-3
+R_GAS_CAL = 1.98720425864083
 HARTREE_TO_KCALMOL = 627.5094740631
 
 
@@ -50,7 +51,6 @@ def calculate_thermodynamics(
                 conf.delta_gibbs_kcalmol = 0.0 if abs(d_g) < 1e-6 else d_g
 
     # 2. Boltzmann population calculation with statistical degeneracy (g_i)
-    # If all conformers have Gibbs free energy, prioritize Gibbs over electronic Delta E
     use_gibbs = len(valid_gibbs) == len(valid_confs)
     rt = R_GAS_KCAL * temperature_k
     boltzmann_factors = []
@@ -90,3 +90,73 @@ def calculate_thermodynamics(
             conf.degeneracy = max(conf.degeneracy, deg)
 
     return valid_confs
+
+
+def calculate_ensemble_observables(
+    conformers: List[ConformerResult],
+    temperature_k: float = 298.15
+) -> Dict[str, Optional[float]]:
+    """Calculates Boltzmann ensemble-averaged properties and conformational entropy.
+    
+    Observables computed:
+      - ensemble_dipole_debye: <mu> = sum(p_i * mu_i)
+      - ensemble_homo_ev: <HOMO> = sum(p_i * HOMO_i)
+      - ensemble_lumo_ev: <LUMO> = sum(p_i * LUMO_i)
+      - ensemble_gap_ev: <Gap> = sum(p_i * Gap_i)
+      - conformational_entropy_cal_mol_k: S_conf = -R * sum(p_i * ln(p_i))
+      - conformational_free_energy_kcalmol: -T * S_conf
+    """
+    valid_confs = [c for c in conformers if c.boltzmann_pop is not None and c.boltzmann_pop > 0]
+    if not valid_confs:
+        return {
+            "ensemble_dipole_debye": None,
+            "ensemble_homo_ev": None,
+            "ensemble_lumo_ev": None,
+            "ensemble_gap_ev": None,
+            "conformational_entropy_cal_mol_k": None,
+            "conformational_free_energy_kcalmol": None
+        }
+
+    total_pop = sum(c.boltzmann_pop for c in valid_confs)
+    weights = [c.boltzmann_pop / total_pop for c in valid_confs]
+
+    # 1. Conformational entropy of mixing: S_conf = -R * sum(p_i * ln(p_i))
+    s_conf = 0.0
+    for p in weights:
+        if p > 1e-12:
+            s_conf -= R_GAS_CAL * p * math.log(p)
+
+    # Free energy stabilization from conformational multiplicity: -T * S_conf (kcal/mol)
+    g_conf = -(temperature_k * s_conf) / 1000.0
+
+    # 2. Ensemble-averaged dipole moment
+    dipoles = [c.dipole_debye for c in valid_confs if c.dipole_debye is not None]
+    ensemble_dipole = None
+    if len(dipoles) == len(valid_confs):
+        ensemble_dipole = round(float(sum(w * d for w, d in zip(weights, dipoles))), 2)
+
+    # 3. Ensemble-averaged HOMO, LUMO, Gap
+    homos = [c.homo_ev for c in valid_confs if c.homo_ev is not None]
+    lumos = [c.lumo_ev for c in valid_confs if c.lumo_ev is not None]
+    gaps = [c.gap_ev for c in valid_confs if c.gap_ev is not None]
+
+    ensemble_homo = None
+    ensemble_lumo = None
+    ensemble_gap = None
+    if len(homos) == len(valid_confs):
+        ensemble_homo = round(float(sum(w * h for w, h in zip(weights, homos))), 2)
+    if len(lumos) == len(valid_confs):
+        ensemble_lumo = round(float(sum(w * l for w, l in zip(weights, lumos))), 2)
+    if len(gaps) == len(valid_confs):
+        ensemble_gap = round(float(sum(w * g for w, g in zip(weights, gaps))), 2)
+    elif ensemble_homo is not None and ensemble_lumo is not None:
+        ensemble_gap = round(ensemble_lumo - ensemble_homo, 2)
+
+    return {
+        "ensemble_dipole_debye": ensemble_dipole,
+        "ensemble_homo_ev": ensemble_homo,
+        "ensemble_lumo_ev": ensemble_lumo,
+        "ensemble_gap_ev": ensemble_gap,
+        "conformational_entropy_cal_mol_k": round(float(s_conf), 2),
+        "conformational_free_energy_kcalmol": round(float(g_conf), 3)
+    }

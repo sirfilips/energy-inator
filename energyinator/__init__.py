@@ -4,7 +4,7 @@ from energyinator.config import CalculationConfig
 from energyinator.models import ConformerResult, CalculationResult
 from energyinator.pipeline import run_pipeline
 from energyinator.scan import run_dihedral_scan, run_2d_dihedral_scan
-from energyinator import geometry
+from energyinator import geometry, export_chem, benchmark
 
 
 def calcola_energia_psi4(
@@ -39,5 +39,7 @@ __all__ = [
     "run_dihedral_scan",
     "run_2d_dihedral_scan",
     "calcola_energia_psi4",
-    "geometry"
+    "geometry",
+    "export_chem",
+    "benchmark"
 ]

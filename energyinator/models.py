@@ -71,6 +71,16 @@ class CalculationResult:
     worst_xyz_optimized: Optional[str] = None
     worst_output_path: Optional[str] = None
     
+    # Ensemble-averaged observables (Boltzmann weighted)
+    ensemble_dipole_debye: Optional[float] = None
+    ensemble_homo_ev: Optional[float] = None
+    ensemble_lumo_ev: Optional[float] = None
+    ensemble_gap_ev: Optional[float] = None
+
+    # Configurational / Conformational entropy
+    conformational_entropy_cal_mol_k: Optional[float] = None
+    conformational_free_energy_kcalmol: Optional[float] = None
+
     conformers: List[ConformerResult] = field(default_factory=list)
     elapsed_time: float = 0.0
     output_dir: str = ""

@@ -241,6 +241,33 @@ def render_sidebar():
             if "archived_session_err" in st.session_state:
                 st.error(st.session_state.pop("archived_session_err"))
 
+    # Scientific Benchmark Suite
+    with st.sidebar.expander("Validazione & Benchmark Scientifico", expanded=False):
+        st.caption("Suite di validazione accademica: calcola l'accuratezza contro equilibri e barriere di riferimento di letteratura.")
+        if st.button("Esegui Benchmark Rapido", icon=":material/speed:", key="btn_run_benchmark"):
+            with st.spinner("Esecuzione benchmark su molecole modello (Butano, 1,2-Etandiolo, Cicloesano)..."):
+                from energyinator.benchmark import run_benchmark
+                bench_data = run_benchmark(method="b3lyp", basis="3-21G", sp_only=True)
+                st.session_state["benchmark_results"] = bench_data
+                st.success("Benchmark completato!")
+
+        if "benchmark_results" in st.session_state:
+            b_res = st.session_state["benchmark_results"]
+            st.dataframe(
+                b_res["df_results"][["System", "Status", "Delta_E_Calc", "Delta_E_Ref", "Error", "Elapsed_s"]],
+                hide_index=True
+            )
+            st.caption(f"**MAE:** {b_res['mean_absolute_error_kcalmol']} kcal/mol &bull; **Tempo:** {b_res['total_elapsed_s']} s")
+            csv_data = b_res["df_results"].to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "Esporta Tabella Tesi (CSV)",
+                data=csv_data,
+                file_name="benchmark_energyinator.csv",
+                mime="text/csv",
+                icon=":material/download:",
+                use_container_width=True
+            )
+
     st.sidebar.markdown("---")
 
     ff_list = ["mmff94", "mmff94s", "uff"]
