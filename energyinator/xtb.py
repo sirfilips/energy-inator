@@ -300,3 +300,4 @@ def refine_conformers_with_xtb(
 
     logger.info("Raffinamento GFN-xTB completato. Conformeri selezionati per DFT: %d", len(refined))
     return refined
+

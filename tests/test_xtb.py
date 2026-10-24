@@ -83,3 +83,4 @@ def test_refine_conformers_with_xtb():
     assert len(refined) == 2
     assert refined[0].delta_xtb_kcalmol == 0.0
     assert refined[0].xtb_energy_hartree is not None
+
