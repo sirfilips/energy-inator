@@ -171,17 +171,7 @@ def filter_conformers(
     return unique_confs
 
 
-def parse_xyz_coords(xyz_str: str) -> List[Tuple[float, float, float]]:
-    """Extracts 3D coordinates from an XYZ formatted string."""
-    lines = xyz_str.strip().splitlines()
-    if len(lines) >= 2 and lines[0].strip().isdigit():
-        lines = lines[2:]
-    coords = []
-    for line in lines:
-        parts = line.split()
-        if len(parts) >= 4:
-            coords.append((float(parts[1]), float(parts[2]), float(parts[3])))
-    return coords
+from energyinator.geometry import parse_xyz_coords
 
 
 def deduplicate_post_dft(

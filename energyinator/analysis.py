@@ -16,8 +16,12 @@ def calculate_thermodynamics(
     energy_tol_kcalmol: float = 0.05
 ) -> List[ConformerResult]:
     """Calculates relative energies (Delta E in kcal/mol and kJ/mol),
-    statistical degeneracy for isoenergetic states, and Boltzmann populations at specified temperature.
+    statistical degeneracy handling, and Boltzmann populations at specified temperature.
     Supports Gibbs free energies (Delta G) when vibrational frequency data is available.
+    
+    Boltzmann populations correctly incorporate conformer degeneracies (g_i):
+        P_i = (g_i * exp(-Delta E_i / RT)) / Q
+        Q = sum_j (g_j * exp(-Delta E_j / RT))
     """
     valid_confs = [c for c in conformers if c.dft_energy_hartree is not None]
     if not valid_confs:
@@ -30,7 +34,7 @@ def calculate_thermodynamics(
     # 1. Compute Delta E (electronic)
     for conf in valid_confs:
         delta_kcal = conf.dft_energy_kcalmol - min_energy_kcal
-        # Clamp tiny negative numerical precision artifacts to 0.0
+        # Clamp tiny numerical precision artifacts to 0.0
         if abs(delta_kcal) < 1e-6:
             delta_kcal = 0.0
         conf.delta_dft_kcalmol = delta_kcal
@@ -45,7 +49,29 @@ def calculate_thermodynamics(
                 d_g = (conf.gibbs_hartree - min_gibbs) * HARTREE_TO_KCALMOL
                 conf.delta_gibbs_kcalmol = 0.0 if abs(d_g) < 1e-6 else d_g
 
-    # 2. Group into degenerate states if within energy_tol_kcalmol
+    # 2. Boltzmann population calculation with statistical degeneracy (g_i)
+    # If all conformers have Gibbs free energy, prioritize Gibbs over electronic Delta E
+    use_gibbs = len(valid_gibbs) == len(valid_confs)
+    rt = R_GAS_KCAL * temperature_k
+    boltzmann_factors = []
+
+    for conf in valid_confs:
+        energy_term = conf.delta_gibbs_kcalmol if (use_gibbs and conf.delta_gibbs_kcalmol is not None) else conf.delta_dft_kcalmol
+        exponent = -energy_term / rt
+        boltz_exp = math.exp(exponent) if exponent > -700 else 0.0
+        # Incorporate intrinsic degeneracy (collapsed microstates / symmetry)
+        g_i = max(1, getattr(conf, "degeneracy", 1))
+        boltzmann_factors.append(g_i * boltz_exp)
+
+    q_partition = sum(boltzmann_factors)
+    if q_partition > 0:
+        for conf, factor in zip(valid_confs, boltzmann_factors):
+            conf.boltzmann_pop = (factor / q_partition) * 100.0
+    else:
+        for conf in valid_confs:
+            conf.boltzmann_pop = 0.0
+
+    # 3. Group into degenerate states if within energy_tol_kcalmol (reporting/clustering)
     clusters = []
     for conf in valid_confs:
         matched_cluster = None
@@ -58,31 +84,9 @@ def calculate_thermodynamics(
         else:
             clusters.append([conf])
 
-    # Assign degeneracy count (or preserve existing multiplicity if already higher)
     for cl in clusters:
         deg = len(cl)
         for conf in cl:
             conf.degeneracy = max(conf.degeneracy, deg)
-
-    # 3. Calculate Boltzmann populations
-    # P_i = exp(-Delta E_i / (R * T)) / Partition_Function
-    # If all conformers have Gibbs free energy, prioritize Gibbs
-    use_gibbs = len(valid_gibbs) == len(valid_confs)
-    rt = R_GAS_KCAL * temperature_k
-    boltzmann_factors = []
-
-    for conf in valid_confs:
-        energy_term = conf.delta_gibbs_kcalmol if (use_gibbs and conf.delta_gibbs_kcalmol is not None) else conf.delta_dft_kcalmol
-        exponent = -energy_term / rt
-        factor = math.exp(exponent) if exponent > -700 else 0.0
-        boltzmann_factors.append(factor)
-
-    q_partition = sum(boltzmann_factors)
-    if q_partition > 0:
-        for conf, factor in zip(valid_confs, boltzmann_factors):
-            conf.boltzmann_pop = (factor / q_partition) * 100.0
-    else:
-        for conf in valid_confs:
-            conf.boltzmann_pop = 0.0
 
     return valid_confs

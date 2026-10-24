@@ -4,44 +4,13 @@ import numpy as np
 from typing import List, Dict, Any, Tuple, Optional
 from rdkit import Chem
 from rdkit.Chem import rdMolTransforms, AllChem
-from rdkit.Geometry import Point3D
 
-from energyinator.conformers import prepare_molecule
+from energyinator.geometry import (
+    parse_xyz,
+    mol_from_smiles_and_xyz,
+    find_rotatable_dihedrals
+)
 from energyinator.quantum import run_psi4_calculation
-
-
-def parse_xyz_string(xyz_str: str) -> Tuple[List[str], np.ndarray]:
-    """Parses an XYZ coordinate string into symbols and numpy coordinates."""
-    lines = xyz_str.strip().splitlines()
-    if len(lines) >= 2 and lines[0].strip().isdigit():
-        lines = lines[2:]
-    symbols = []
-    coords = []
-    for l in lines:
-        parts = l.split()
-        if len(parts) >= 4:
-            symbols.append(parts[0])
-            coords.append([float(parts[1]), float(parts[2]), float(parts[3])])
-    return symbols, np.array(coords)
-
-
-def create_mol_from_smiles_and_xyz(smiles: str, xyz_str: str) -> Chem.Mol:
-    """Creates a hydrated RDKit molecule with 3D conformer coordinates set from an XYZ block."""
-    mol, _, _ = prepare_molecule(smiles)
-    symbols, coords = parse_xyz_string(xyz_str)
-    
-    if len(symbols) != mol.GetNumAtoms():
-        # Fallback: embed directly
-        AllChem.EmbedMolecule(mol)
-        return mol
-
-    conf = Chem.Conformer(mol.GetNumAtoms())
-    for i, pt in enumerate(coords):
-        conf.SetAtomPosition(i, Point3D(float(pt[0]), float(pt[1]), float(pt[2])))
-        
-    mol.RemoveAllConformers()
-    mol.AddConformer(conf, assignId=True)
-    return mol
 
 
 def run_dihedral_scan(
@@ -60,24 +29,30 @@ def run_dihedral_scan(
     """Performs a 1D torsional potential energy surface (PES) scan over 0° to 360°.
     
     Supports both relaxed (constrained optimization) and rigid torsional scans.
+    Highly optimized: pre-computes force-field parameters outside the loop.
     """
     a1, a2, a3, a4 = atom_indices
-    base_mol = create_mol_from_smiles_and_xyz(smiles, xyz_str)
+    base_mol = mol_from_smiles_and_xyz(smiles, xyz_str)
 
     angles = list(range(0, 361, step_deg))
     raw_energies = []
     xyz_list = []
+
+    eng = engine.lower()
+    
+    # Pre-calculate MMFF molecule properties once if applicable
+    mmff_props = None
+    if eng == "mmff94":
+        mmff_props = AllChem.MMFFGetMoleculeProperties(base_mol)
 
     for deg in angles:
         mol_step = Chem.Mol(base_mol)
         conf = mol_step.GetConformer(0)
         rdMolTransforms.SetDihedralDeg(conf, a1, a2, a3, a4, float(deg))
 
-        eng = engine.lower()
         if eng == "mmff94":
-            mp = AllChem.MMFFGetMoleculeProperties(mol_step)
-            if mp is not None:
-                ff = AllChem.MMFFGetMoleculeForceField(mol_step, mp, confId=0)
+            if mmff_props is not None:
+                ff = AllChem.MMFFGetMoleculeForceField(mol_step, mmff_props, confId=0)
                 if ff is not None:
                     if relaxed:
                         ff.MMFFAddTorsionConstraint(a1, a2, a3, a4, False, float(deg), float(deg), 1000.0)
@@ -161,13 +136,21 @@ def run_2d_dihedral_scan(
     engine: str = "mmff94",
     relaxed: bool = True
 ) -> Dict[str, Any]:
-    """Performs a 2D torsional potential energy surface scan across two coupled dihedral angles."""
+    """Performs a 2D torsional potential energy surface scan across two coupled dihedral angles.
+    
+    Highly optimized for performance: pre-computes force field parameters once outside the double loop.
+    """
     a1, a2, a3, a4 = dihedral_1
     b1, b2, b3, b4 = dihedral_2
 
-    base_mol = create_mol_from_smiles_and_xyz(smiles, xyz_str)
+    base_mol = mol_from_smiles_and_xyz(smiles, xyz_str)
     angles_1 = list(range(0, 361, step_deg))
     angles_2 = list(range(0, 361, step_deg))
+
+    eng = engine.lower()
+    mmff_props = None
+    if eng == "mmff94":
+        mmff_props = AllChem.MMFFGetMoleculeProperties(base_mol)
 
     z_matrix = []
     min_e = float("inf")
@@ -181,11 +164,9 @@ def run_2d_dihedral_scan(
             rdMolTransforms.SetDihedralDeg(conf, a1, a2, a3, a4, float(deg1))
             rdMolTransforms.SetDihedralDeg(conf, b1, b2, b3, b4, float(deg2))
 
-            eng = engine.lower()
             if eng == "mmff94":
-                mp = AllChem.MMFFGetMoleculeProperties(mol_step)
-                if mp is not None:
-                    ff = AllChem.MMFFGetMoleculeForceField(mol_step, mp, confId=0)
+                if mmff_props is not None:
+                    ff = AllChem.MMFFGetMoleculeForceField(mol_step, mmff_props, confId=0)
                     if ff is not None:
                         if relaxed:
                             ff.MMFFAddTorsionConstraint(a1, a2, a3, a4, False, float(deg1), float(deg1), 1000.0)

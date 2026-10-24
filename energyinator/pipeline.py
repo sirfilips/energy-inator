@@ -14,7 +14,7 @@ from energyinator.conformers import (
     filter_conformers,
     deduplicate_post_dft
 )
-from energyinator.quantum import setup_psi4, close_psi4, run_psi4_calculation
+from energyinator.quantum import setup_psi4, close_psi4, run_psi4_calculation, cleanup_psi4_residual_files
 from energyinator.analysis import calculate_thermodynamics
 from energyinator.io import setup_run_logger, close_run_logger, save_conformer_xyz, export_results_excel
 
@@ -73,11 +73,13 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
             raise RuntimeError("Nessun conformero ha superato la fase di filtraggio classico.")
 
         # 6. Setup Psi4
+        scratch_dir = os.path.join(output_dir, "scratch")
         setup_psi4(
             memory=config.psi4_memory,
             threads=config.psi4_threads,
             basis=config.psi4_basis,
-            log_file=os.path.join(output_dir, "psi4_output.dat")
+            log_file=os.path.join(output_dir, "psi4_output.dat"),
+            scratch_dir=scratch_dir
         )
 
         # 7. Quantum calculations
@@ -233,6 +235,8 @@ def run_pipeline(config: CalculationConfig) -> CalculationResult:
         return res
 
     finally:
-        # Crucial for Windows: release psi4 output and file logging locks
+        # Crucial for Windows: release psi4 output and file logging locks, and clean scratch
         close_psi4()
+        cleanup_psi4_residual_files(output_dir)
+        cleanup_psi4_residual_files(os.getcwd())
         close_run_logger(log_handler)

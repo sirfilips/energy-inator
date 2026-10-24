@@ -34,11 +34,25 @@ SOLVENT_MAP = {
 }
 
 
-def setup_psi4(memory: str = "8 GB", threads: int = 8, basis: str = "6-31G(d)", log_file: Optional[str] = None):
-    """Configures global Psi4 runtime settings."""
+def setup_psi4(
+    memory: str = "8 GB",
+    threads: int = 8,
+    basis: str = "6-31G(d)",
+    log_file: Optional[str] = None,
+    scratch_dir: Optional[str] = None
+):
+    """Configures global Psi4 runtime settings and scratch directory."""
     psi4.set_memory(memory)
     psi4.set_num_threads(threads)
     psi4.set_options({"basis": basis})
+    
+    # Configure dedicated scratch path to avoid polluting workspace root
+    if scratch_dir:
+        os.makedirs(scratch_dir, exist_ok=True)
+        try:
+            psi4.core.IOManager.shared_object().set_default_path(scratch_dir.replace("\\", "/"))
+        except Exception as e:
+            logger.debug(f"Impossibile impostare scratch path Psi4: {e}")
     
     if log_file:
         psi4.core.set_output_file(log_file, False)
@@ -64,12 +78,30 @@ def close_psi4():
         psi4.core.clean()
     except Exception:
         pass
+    # Restore scratch directory to persistent system temp to avoid crashes if custom scratch dir is deleted
+    try:
+        sys_temp = tempfile.gettempdir().replace("\\", "/")
+        psi4.core.IOManager.shared_object().set_default_path(sys_temp)
+    except Exception:
+        pass
     # Reopen null device so subsequent calculations don't write to a closed C++ FILE* pointer
     devnull = "nul" if os.name == "nt" else "/dev/null"
     try:
         psi4.core.set_output_file(devnull, False)
     except Exception:
         pass
+
+
+def cleanup_psi4_residual_files(directory: str):
+    """Cleans up stray scratch files created by PCM or Psi4 in a directory."""
+    patterns = ["cavity.npz", "cavity.off*", "PEDRA.OUT*", "psi.*.clean", "timer.dat"]
+    for pat in patterns:
+        for f in glob.glob(os.path.join(directory, pat)):
+            try:
+                if os.path.isfile(f):
+                    os.remove(f)
+            except Exception:
+                pass
 
 
 def configure_solvent_pcm(solvent: Optional[str]):
@@ -254,32 +286,7 @@ def generate_orbital_cube(
     solvent: Optional[str] = None,
     grid_spacing: float = 0.35
 ) -> Optional[Dict[str, Any]]:
-    """Genera la griglia volumetrica 3D (Gaussian Cube) per un orbitale molecolare specifico (HOMO, LUMO, ecc.).
-    
-    Parameters
-    ----------
-    xyz_str : str
-        Coordinate molecolari in formato XYZ.
-    orbital_type : str
-        Identificativo dell'orbitale: 'HOMO', 'LUMO', 'HOMO-1', 'LUMO+1', 'HOMO-2', 'LUMO+2' o indice 1-based.
-    method : str
-        Metodo quantistico SCF/DFT (es. 'b3lyp', 'hf', 'wb97x-d').
-    basis : str
-        Set di basi atomiche (es. '6-31G(d)', 'sto-3g', 'def2-svp').
-    charge : int
-        Carica formale totale del sistema.
-    multiplicity : int
-        Molteplicità di spin (2S+1).
-    solvent : Optional[str]
-        Solvente per il modello PCM implicito.
-    grid_spacing : float
-        Risoluzione spaziale dei voxel della griglia (default 0.35 Bohr).
-        
-    Returns
-    -------
-    Optional[Dict[str, Any]]
-        Dizionario con metadati dell'orbitale e dati cubici per il rendering isosuperficie in py3Dmol.
-    """
+    """Generates 3D volumetric grid (Gaussian Cube) for a molecular orbital (HOMO, LUMO, etc.)."""
     try:
         devnull = "nul" if os.name == "nt" else "/dev/null"
         try:
@@ -305,7 +312,7 @@ def generate_orbital_cube(
             _, wfn = psi4.energy(effective_method, molecule=mol, return_wfn=True)
         except Exception as err:
             if "dftd3" in str(err).lower() or "resourceerror" in str(err).lower():
-                logger.warning(f"Fallback su functional con dispersione nativa 'wb97x-d'...")
+                logger.warning("Fallback su functional con dispersione nativa 'wb97x-d'...")
                 effective_method = "wb97x-d"
                 _, wfn = psi4.energy(effective_method, molecule=mol, return_wfn=True)
             else:
